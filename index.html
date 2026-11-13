@@ -16,7 +16,6 @@
 <meta name="apple-mobile-web-app-title" content="تم للتحويلات">
 <meta property="og:title" content="تم للتحويلات">
 <meta property="og:description" content="متابعة تحويلات الموردين بين الفروع ومسؤول التحويلات">
-<meta property="og:image" content="https://alhakemi209-max.github.io/tamm/icons/icon-512.png">
 <style>
   html,body{margin:0;height:100%;width:100%;background:#00286C;overflow:hidden;-webkit-text-size-adjust:100%}
   #app{position:fixed;top:env(safe-area-inset-top,0px);left:0;right:0;bottom:0;width:1px;min-width:100%;max-width:100%;height:calc(100% - env(safe-area-inset-top,0px));border:0;background:#F3F5F9}
@@ -27,7 +26,7 @@
   .bar i{display:block;width:40%;height:100%;background:#fff;border-radius:3px;animation:mv 1.1s ease-in-out infinite}
   @keyframes mv{0%{transform:translateX(160%)}100%{transform:translateX(-260%)}}
   #msg{color:#fff;font:15px/1.7 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;text-align:center;padding:0 24px;max-width:420px}
-  #msg a{color:#9FE3B8}
+  #msg button{margin-top:14px;font:inherit;font-weight:700;color:#00286C;background:#fff;border:0;border-radius:999px;padding:9px 26px}
 </style>
 </head>
 <body>
@@ -36,15 +35,39 @@
 <script src="config.js"></script>
 <script>
   const APP_URL = (window.TAMM_APP_URL || '').trim();
-
-  const splash = document.getElementById('splash'), frame = document.getElementById('app'), msg = document.getElementById('msg');
+  const splash = document.getElementById('splash'), frame = document.getElementById('app'), msg = document.getElementById('msg'), bar = document.querySelector('.bar');
+  const SANDBOX = /^https:\/\/n-[a-z0-9-]+-script\.googleusercontent\.com$/;
+  const TKEY = 'tamm_tk';
+  const mem = { get(k){ try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } }, set(k, v){ try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch(e){} } };
+  let view = '', loadedAt = 0, timer = 0;
+  function show(text, retry){
+    splash.classList.remove('hide'); bar.style.display = retry ? 'none' : '';
+    msg.textContent = text || '';
+    if (retry){ const b = document.createElement('button'); b.type = 'button'; b.textContent = 'إعادة المحاولة'; b.onclick = () => load(); msg.appendChild(document.createElement('br')); msg.appendChild(b); }
+  }
+  function load(){
+    clearTimeout(timer);
+    if (navigator.onLine === false){ show('لا يوجد اتصال بالإنترنت. سيفتح النظام تلقائياً عند رجوع الاتصال.', true); return; }
+    show('');
+    frame.src = 'about:blank';
+    setTimeout(() => { frame.src = APP_URL; }, 30);
+    // التحميل يبقى داخل التطبيق دائماً: لا روابط تفتح المتصفح
+    timer = setTimeout(() => { if (!splash.classList.contains('hide')) show('يتأخر التحميل. تحقق من الإنترنت.', true); }, 25000);
+  }
   if (!/^https:\/\/script\.google\.com\/(?:a\/macros\/[^/]+|macros)\/s\/[\w-]+\/exec/.test(APP_URL)) {
-    document.querySelector('.bar').remove();
+    bar.remove();
     msg.textContent = 'لم يُضبط رابط التطبيق بعد.';
   } else {
-    frame.src = APP_URL;
-    frame.addEventListener('load', () => setTimeout(() => splash.classList.add('hide'), 250));
-    setTimeout(() => { if (!splash.classList.contains('hide')) msg.innerHTML = 'يتأخر التحميل؟ <a href="' + APP_URL + '">افتح التطبيق مباشرة</a>'; }, 15000);
+    frame.addEventListener('load', () => { if (frame.src === 'about:blank' || !frame.src) return; loadedAt = Date.now(); clearTimeout(timer); setTimeout(() => splash.classList.add('hide'), 250); });
+    window.addEventListener('message', e => {
+      const d = e.data;
+      if (!d || d.tamm !== 1 || !SANDBOX.test(e.origin)) return;
+      if (d.t === 'get'){ e.source.postMessage({ tamm:2, t:'state', token:mem.get(TKEY), view:view }, e.origin); view = ''; }
+      else if (d.t === 'set'){ mem.set(TKEY, /^[a-f0-9]{64}$/.test(String(d.token || '')) ? d.token : ''); }
+      else if (d.t === 'reload'){ view = String(d.view || '').slice(0, 20); load(); }
+    });
+    window.addEventListener('online', () => { if (!splash.classList.contains('hide')) load(); });
+    load();
   }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
